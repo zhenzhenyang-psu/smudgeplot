@@ -66,6 +66,12 @@ smudgeplot hetkmers -o tests/data/minc_sample_all -k 21 tests/data/minc_k21_samp
 smudgeplot hetkmers -o tests/data/toy_middle -k 21 tests/data/toy_kmer_k21.dump --all
 ```
 
+### API of map
+
+```
+smudgeplot map -o tests/data/toy_middle tests/data/fake_genome_h1.fa
+```
+
 ### Virtual environment testing
 
 Testing of virtual env if it works

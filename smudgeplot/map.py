@@ -1,9 +1,10 @@
 from Bio import SeqIO
-from Bio import bgzf
+# from Bio import bgzf
 from Bio.Seq import Seq
 from PySAIS import sais
 from bisect import bisect_right
 from time import time
+import pysam
 import numpy as np
 import gzip
 import logging
@@ -110,6 +111,10 @@ class mapper:
         else:
             proc_smudge = self.to_plot
 
+        # build header
+        header = { 'HD': {'VN': '1.3', 'SO': 'coordinate'},
+                   'SQ': [{'LN': self.scf_sizes[i], 'SN': scf} for i,scf in enumerate(self.scf_names)] }
+
         while os.path.isfile(self.output_pattern + '_kmers_in_smudge_' + str(proc_smudge) + '.txt'):
             logging.info('Processig smudge ' + str(proc_smudge))
 
@@ -129,24 +134,39 @@ class mapper:
             # hit_numbers.value_counts()
 
             logging.info('Generating bam file.')
+
+            # generate BAM file using pysam
             hlaf_of_kmer = str(int((len(kmers[0]) - 1) / 2))
             cigar = hlaf_of_kmer + '=1X' + hlaf_of_kmer + '='
             bamfile_name = self.output_pattern + "_" + str(proc_smudge) + "_mapped.bam"
-            with bgzf.BgzfWriter(bamfile_name, 'w') as bamfile:
-                writer = csv.writer(bamfile, delimiter='\t', lineterminator='\n')
-                writer.writerow(['@HD', 'VN:1.3', 'SO:coordinate'])
-                for i, scf in enumerate(self.scf_names):
-                    writer.writerow(['@SQ', 'SN:' + scf, 'LN:' + str(self.scf_sizes[i])])
+
+            with pysam.AlignmentFile(bamfile_name, "wb", header = header) as bamfile:
                 for i, mapped_kmer in enumerate(mapping_list):
+                    a = pysam.AlignedSegment()
+                    a.query_name = 'k' + str(i + 1)
+                    a.query_sequence = kmers[i]
+                    # a.mapping_quality = 255
+                    # a.next_reference_id = 0
+                    # a.next_reference_start = 199
+                    # a.template_length = 167
+                    # a.query_qualities = pysam.qualitystring_to_array("<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<")
+                    # a.tags = (("NM", 1),
+                    #           ("RG", "L1"))
                     for entry in mapped_kmer:
+                        a.reference_id = entry[0]
+                        a.reference_start = entry[1]
+                        # a.cigar = ((0,10), (2,1), (0,25))
+                        # cigar
                         if entry[2] == '+':
-                            flag = 0
+                            a.flag = 0
                         else:
-                            flag = 16
+                            a.flag = 16
                         writer.writerow(['k' + str(i + 1), str(flag), entry[0], entry[1], 255, cigar, '*', '0', '0', kmers[i], '*'])
                     if not mapped_kmer:
-                        flag = 4
+                        a.flag = 4
                         writer.writerow(['k' + str(i + 1), str(flag), '*', 0, 255, '*', '*', '0', '0', kmers[i], '*'])
+                bamfile.write(a)
+
             logging.info('bam file saved.')
             if self.to_plot != 0:
                 break
