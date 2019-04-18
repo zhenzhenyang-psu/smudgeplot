@@ -135,6 +135,10 @@ class mapper:
 
             logging.info('Generating bam file.')
 
+            name2index = dict()
+            for i,scf in enumerate(self.scf_names):
+                name2index[scf] = i
+
             # generate BAM file using pysam
             hlaf_of_kmer = str(int((len(kmers[0]) - 1) / 2))
             cigar = hlaf_of_kmer + '=1X' + hlaf_of_kmer + '='
@@ -145,27 +149,18 @@ class mapper:
                     a = pysam.AlignedSegment()
                     a.query_name = 'k' + str(i + 1)
                     a.query_sequence = kmers[i]
-                    # a.mapping_quality = 255
-                    # a.next_reference_id = 0
-                    # a.next_reference_start = 199
-                    # a.template_length = 167
-                    # a.query_qualities = pysam.qualitystring_to_array("<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<")
-                    # a.tags = (("NM", 1),
-                    #           ("RG", "L1"))
                     for entry in mapped_kmer:
-                        a.reference_id = entry[0]
+                        a.reference_id = name2index[entry[0]]
                         a.reference_start = entry[1]
-                        # a.cigar = ((0,10), (2,1), (0,25))
-                        # cigar
+                        a.cigarstring = cigar
                         if entry[2] == '+':
                             a.flag = 0
                         else:
                             a.flag = 16
-                        writer.writerow(['k' + str(i + 1), str(flag), entry[0], entry[1], 255, cigar, '*', '0', '0', kmers[i], '*'])
+                        bamfile.write(a)
                     if not mapped_kmer:
                         a.flag = 4
-                        writer.writerow(['k' + str(i + 1), str(flag), '*', 0, 255, '*', '*', '0', '0', kmers[i], '*'])
-                bamfile.write(a)
+                        bamfile.write(a)
 
             logging.info('bam file saved.')
             if self.to_plot != 0:

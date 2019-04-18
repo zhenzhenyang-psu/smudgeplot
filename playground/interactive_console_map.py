@@ -1,22 +1,26 @@
-import argparse
 from Bio import SeqIO
+from Bio.Seq import Seq
 from PySAIS import sais
+from bisect import bisect_right
+from time import time
+from smudgeplot.map import mapper
+import pysam
 import numpy as np
 import gzip
-import pandas
+import logging
+import csv
+import os
 import time
-from bisect import bisect_right
-from smudgeplot.map import mapper
+import argparse
 # argument 1
 # args.genomefile
-kmer_genome_file = 'data/Tps1/1_Tps_b3v07.fa'
-# kmer_fasta_file = 'data/Tps1/Tps_middle_pair_end_reads_kmers_in_smudge_1_sample_50.fasta'
-output_pattern = 'data/Tps1/Tps_middle_pair_end_reads_kmers_in_smudge_1_sample_50.bed'
+kmer_genome_file = 'tests/data/fake_genome_h1.fa'
+output_pattern = 'tests/data/toy_middle_kmers'
 
 parser = argparse.ArgumentParser(description='whatever')
 args = parser.parse_args()
 args.genomefile = kmer_genome_file
-args.o = 'data/Tps1/Tps_middle_pair_end_reads'
+args.o = output_pattern
 args.s = 0
 
 kmer_map = mapper(args)
@@ -28,19 +32,64 @@ kmer_map.loadGenome()
 
 kmer_map.constructSuffixArray()
 
-kmer_file_name_s1 = 'data/Tps1/Tps_middle_pair_end_reads_kmers_in_smudge_1.txt'
+kmer_file_name_s1 = output_pattern + '_in_smudge_1.txt'
 with open(kmer_file_name_s1, 'r') as s1_kmer_file:
-    s1_kmers = [kmer.rstrip() for kmer in s1_kmer_file]
+    kmers = [kmer.rstrip() for kmer in s1_kmer_file]
 
 
 start = time.time()
-mapping_list = [kmer_map.searchKmer(kmer) for kmer in s1_kmers]
+mapping_list = [kmer_map.searchKmer(kmer) for kmer in kmers]
 end = time.time()
 print('Done in ' + str(round(end - start, 1)) + ' s')
 
-hit_numbers = [len(mapped_kmer) for mapped_kmer in mapping_list]
-hist = Counter(hit_numbers)
-fractions = [100 * round(hist[i] / len(mapping_list), 4) for i in range(0,10)]
+########### SAVE BAM
+header = { 'HD': {'VN': '1.3', 'SO': 'coordinate'},
+           'SQ': [{'LN': kmer_map.scf_sizes[i], 'SN': scf} for i,scf in enumerate(kmer_map.scf_names)] }
+
+name2index = dict()
+for i,scf in enumerate(kmer_map.scf_names):
+    name2index[scf] = i
+
+hlaf_of_kmer = str(int((len(kmers[0]) - 1) / 2))
+cigar = hlaf_of_kmer + '=1X' + hlaf_of_kmer + '='
+bamfile_name = kmer_map.output_pattern + "_" + str(proc_smudge) + "_mapped.bam"
+
+bamfile = pysam.AlignmentFile(bamfile_name, "wb", header = header)
+for i, mapped_kmer in enumerate(mapping_list):
+    a = pysam.AlignedSegment()
+    a.query_name = 'k' + str(i + 1)
+    a.query_sequence = kmers[i]
+    # a.mapping_quality = 255
+    # a.next_reference_id = 0
+    # a.next_reference_start = 199
+    # a.template_length = 167
+    # a.query_qualities = pysam.qualitystring_to_array("<<<<<<<<<<<<<<<<<<<<<:<9/,&,22;;<<<")
+    # a.tags = (("NM", 1),
+    #           ("RG", "L1"))
+    for entry in mapped_kmer:
+        a.reference_id = name2index[entry[0]]
+        a.reference_start = entry[1]
+        # a.cigar = ((0,10), (2,1), (0,25))
+        # cigar
+        if entry[2] == '+':
+            a.flag = 0
+        else:
+            a.flag = 16
+        bamfile.write(a)
+    if not mapped_kmer:
+        a.flag = 4
+        bamfile.write(a)
+
+
+
+
+
+
+
+######
+# hit_numbers = [len(mapped_kmer) for mapped_kmer in mapping_list]
+# hist = Counter(hit_numbers)
+# fractions = [100 * round(hist[i] / len(mapping_list), 4) for i in range(0,10)]
 
 import logging
 
