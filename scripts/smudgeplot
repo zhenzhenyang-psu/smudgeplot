@@ -10,7 +10,7 @@ from smudgeplot.cutoff import cutoff
 from smudgeplot.map import mapper
 
 # number name(-development); meaning with more commits over the mentioned version
-version = '0.1.3 beta3-development'
+version = '0.2.O gertruda-development'
 
 # Development:
 #  - logging is done on the standard error stream using logging package (note different levels info, warning...)
@@ -18,10 +18,10 @@ version = '0.1.3 beta3-development'
 #  - methods are camel case; variables snake case
 
 def hetkmers(args):
-    if args.all:
-        all_one_away(args)
-    else:
+    if args.middle:
         middle_one_away(args)
+    else:
+        all_one_away(args)
     # LOG arguments by user
 
 def plot(args):

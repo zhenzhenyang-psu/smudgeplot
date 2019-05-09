@@ -1,8 +1,5 @@
 from collections import defaultdict
-import multiprocessing as mp
-import argparse
-import itertools
-import sys
+from itertools import combinations
 import logging
 
 ###################
@@ -12,11 +9,10 @@ import logging
 
 def get_one_away_pairs(kmer_index_family, k):
   """kmer_index_family is a list of (kmer, index) pairs currently under consideration. k is the kmer length. get_one_away_pairs returns a list of pairs of indices where each pair of indices corresponds to a pair of kmers different in exactly one base."""
-  logging.info('Extracting kmer pairs that differ in the middle nt')
 
   #This is the base case for the recursion. Return every pair of indices where the kmers corresponding to those indices differ at exactly one base.
   if k == 1:
-    return [(i,j) for ((kmer1,i),(kmer2,j)) in itertools.combinations(kmer_index_family, 2) if kmer1 != kmer2]
+    return [(i,j) for ((kmer1,i),(kmer2,j)) in combinations(kmer_index_family, 2) if kmer1 != kmer2]
 
   #Initialize one_away_pairs, which will be returned by get_one_away_pairs.
   one_away_pairs = []
@@ -56,16 +52,6 @@ def get_one_away_pairs(kmer_index_family, k):
 
   return(one_away_pairs)
 
-def worker(q, results, k):
-  while True:
-    kmer_index_family = q.get()
-    if kmer_index_family is None:
-      results.put(None)
-      break
-    results.put(get_one_away_pairs(kmer_index_family, k))
-  q.close()
-  results.close()
-
 #########################################
 # WRAPPING FUNCTIONS OF THE TWO MODULES #
 #########################################
@@ -73,19 +59,20 @@ def worker(q, results, k):
 def middle_one_away(args):
   logging.info('Extracting kmer pairs that differ in the middle nt')
 
-  dumps_file = args.infile
-  output_pattern = args.o
-  k = int(args.k)
-
-  # file_one_away_pairs = open(output_pattern + '_one_away_pairs.tsv', 'w')
-  file_coverages = open(output_pattern + '_coverages.tsv', 'w')
-  file_kmers = open(output_pattern + '_sequences.tsv', 'w')
+  # file_one_away_pairs = open(args.o + '_one_away_pairs.tsv', 'w')
+  file_coverages = open(args.o + '_coverages.tsv', 'w')
+  file_kmers = open(args.o + '_sequences.tsv', 'w')
 
   duplicated = set()
   filtered = set()
 
   #Initialize a dictionary in which the key is the right kmer_half (not including the middle nucleotide), and the value is a list of (index, coverage) tuples corresponding to kmers that have that particular right kmer_half.
   kmer_R_to_index_family = defaultdict(list)
+
+  # read the first line to get the length of the kmer
+  with open(args.infile.name) as dump_file:
+    kmer, coverage = dump_file.readline().split()
+    k = len(kmer)
 
   #Get the locations for the two halves of the kmer.
   k_middle = k // 2
@@ -94,10 +81,10 @@ def middle_one_away(args):
   i_R_L = k_middle + 1
   i_R_R = k-1
 
-  logging.info('Saving ' + output_pattern + '_coverages.tsv and ' + output_pattern + '_sequences.tsv files.')
+  logging.info('Saving ' + args.o + '_coverages.tsv and ' + args.o + '_sequences.tsv files.')
   # Read each line of the input file in order to load the kmers and coverages and process the kmer halves.
   current_kmer_L = ""
-  for i1, line in enumerate(dumps_file):
+  for i1, line in enumerate(args.infile):
     kmer, coverage1 = line.split()
     coverage1 = int(coverage1)
 
@@ -131,113 +118,44 @@ def middle_one_away(args):
   file_kmers.close()
 
 def all_one_away(args):
-  dumps_file = args.infile
-  output_pattern = args.o
-  k = int(args.k)
-  num_processes = int(args.t)
-
-  #Initiate coverages list.
+  #Initiate kmer and coverages lists.
+  kmers = []
   coverages = []
 
-  #Initiate one_away_pairs list.
-  one_away_pairs = []
-
-  #Initialize dictionaries in which the key is a kmer_half (kmer_L or kmer_R respectively), and the value is a list of (other_kmer_half, index) pairs.
-  kmer_L_to_index_family = defaultdict(list)
-  kmer_R_to_index_family = defaultdict(list)
-
-  #Get the locations for the two halves of the kmer.
-  k_L = k // 2
-  i_L_L = 0
-  i_L_R = k_L - 1
-  i_R_L = k_L
-  i_R_R = k-1
-
-  #Read each line of the input file in order to load the kmers and coverages and process the kmer halves.
-  for i, line in enumerate(dumps_file):
+  # Read each line of the input file in order to
+  # load the kmers and coverages and process the kmer halves.
+  for i, line in enumerate(args.infile):
     kmer, coverage = line.split()
     coverage = int(coverage)
     coverages.append(coverage)
-    kmer_L = kmer[i_L_L:i_L_R+1]
-    kmer_R = kmer[i_R_L:i_R_R+1]
-    kmer_L_to_index_family[kmer_L].append((kmer_R, i))
-    kmer_R_to_index_family[kmer_R].append((kmer_L, i))
+    kmers.append(kmer)
 
-  logging.info('Kmers and coverages loaded. Initial kmer halves processed. Starting processes.')
+  logging.info('Kmers and coverages loaded.')
 
-  #Create input queue and results queue to process the kmer index families.
-  mp.set_start_method('spawn')
-  q = mp.Queue()
-  results = mp.Queue()
+  k = len(kmer) # all the kmers in the dump file have the same length, so I can just calc the number of nts in the last one
+  # get_one_away_pairs is a recursive function that gatheres indices of all kmer 1 SNP from each other
+  one_away_pairs = get_one_away_pairs([(kmer,i) for i,kmer in enumerate(kmers)], k)
 
-  #Initiate processes.
-  processes = []
-  for i in range(num_processes):
-    p = mp.Process(target = worker, args = (q, results, k))
-    p.start()
-    processes.append(p)
+  logging.info('Kmer pairs identified.')
 
-  logging.info('Processes Started.')
-
-  #Add kmer index families to the queue.
-  for kmer_L_index_family in kmer_L_to_index_family.values():
-    if len(kmer_L_index_family) > 1:
-      q.put(kmer_L_index_family)
-
-  del kmer_L_to_index_family
-
-  for kmer_R_index_family in kmer_R_to_index_family.values():
-    if len(kmer_R_index_family) > 1:
-      q.put(kmer_R_index_family)
-
-  del kmer_R_to_index_family
-
-  #Add sentinels so the processes know when to terminate.
-  for i in range(num_processes):
-    q.put(None)
-
-  q.close()
-  logging.info('All index families added to queue.')
-
-  #Save one_away_pairs to a tsv file, and keep track of which indices only occur once.
-  num_completed = 0
   repeated = {}
-  with open(output_pattern + '_one_away_pairs.tsv', 'w') as record_file:
-    while True:
-      partial_one_away_pairs = results.get()
-      if partial_one_away_pairs is None:
-        num_completed += 1
-        if num_completed == num_processes:
-          break
-      else:
-        for (i1, i2) in partial_one_away_pairs:
-          one_away_pairs.append((i1, i2))
-          record_file.write(str(i1) + '\t' + str(i2) + '\n')
-          repeated[i1] = i1 in repeated
-          repeated[i2] = i2 in repeated
+  for (i1, i2) in one_away_pairs:
+    repeated[i1] = i1 in repeated
+    repeated[i2] = i2 in repeated
 
-  logging.info('*_one_away_pairs.tsv file saved.')
+  logging.info('Kmers in unique kmer pairs identified.')
 
-  #Wait for the processes to finish.
-  for p in processes:
-    p.join()
-
-  results.close()
-  logging.info('Processes joined.')
-
-  #Save families_2 and coverages_2 tsv files, which only include one_away_pairs that don't overlap any others.
-  with open(output_pattern + '_families_2.tsv', 'w') as record_file1, open(output_pattern + '_coverages_2.tsv', 'w') as record_file2:
+  with open(args.o + '_sequences.tsv', 'w') as file_seqs, open(args.o + '_coverages.tsv', 'w') as file_coverages:
     for (i1, i2) in one_away_pairs:
       if not repeated[i1] and not repeated[i2]:
         cov1 = coverages[i1]
         cov2 = coverages[i2]
         if cov1 < cov2:
-          # TODO get the actual kmers OR figure out translation functions (a new class I suppose)
-          record_file1.write(str(i1) + '\t' + str(i2) + '\n')
-          record_file2.write(str(cov1) + '\t' + str(cov2) + '\n')
+          file_coverages.write(str(cov1) + '\t' + str(cov2) + '\n')
+          file_seqs.write(kmers[i1] + '\t' + kmers[i2] + '\n')
         else:
-          record_file1.write(str(i2) + '\t' + str(i1) + '\n')
-          record_file2.write(str(cov2) + '\t' + str(cov1) + '\n')
+          file_coverages.write(str(cov2) + '\t' + str(cov1) + '\n')
+          file_seqs.write(kmers[i2] + '\t' + kmers[i1] + '\n')
 
-  logging.info('*_families_2.tsv and *_coverages_2.tsv files saved.')
+  logging.info(args.o + '_families.tsv and ' + args.o + '_coverages.tsv files saved.')
 

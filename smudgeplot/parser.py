@@ -40,9 +40,7 @@ tasks: cutoff    Calculate meaningful values for lower/upper kmer histogram cuto
             description='Calculate unique kmer pairs from a Jellyfish or KMC dump file.')
         argparser.add_argument('infile', nargs='?', type=argparse.FileType('r'), default=sys.stdin, help='Alphabetically sorted Jellyfish or KMC dump file (stdin).')
         argparser.add_argument('-o', help='The pattern used to name the output (kmerpairs).', default='kmerpairs')
-        argparser.add_argument('-k', help='The length of the kmer.', default=21)
-        argparser.add_argument('-t', help='Number of processes to use.', default = 4)
-        argparser.add_argument('--all', dest='all', action='store_const', const = True, default = False,
+        argparser.add_argument('--middle', dest='middle', action='store_const', const = True, default = False,
                           help='Get all kmer pairs one SNP away from each other (default: just the middle one).')
         self.arguments = argparser.parse_args(sys.argv[2:])
 

@@ -21,8 +21,8 @@ This tool is planned to be a part of [GenomeScope](https://github.com/schatzlab/
 
 ## Installation
 
-Travis build & unit test of `master` branch : [![master_build](https://travis-ci.org/KamilSJaron/smudgeplot.svg?branch=master)](https://travis-ci.org/KamilSJaron/smudgeplot/branches)
-Travis build & unit test of `dev` branch : [![dev_test](https://travis-ci.org/KamilSJaron/smudgeplot.svg?branch=dev)](https://travis-ci.org/KamilSJaron/smudgeplot/branches)
+<!-- Travis build & unit test of `master` branch : [![master_build](https://travis-ci.org/KamilSJaron/smudgeplot.svg?branch=master)](https://travis-ci.org/KamilSJaron/smudgeplot/branches)
+Travis build & unit test of `dev` branch : [![dev_test](https://travis-ci.org/KamilSJaron/smudgeplot.svg?branch=dev)](https://travis-ci.org/KamilSJaron/smudgeplot/branches) -->
 
 You need a program for counting kmers installed, such as [KMC](https://github.com/refresh-bio/KMC) and we strongly recommend running [GenomeScope](https://github.com/schatzlab/genomescope) as well, it's not rare that both GenomeScope and smudgeplot are needed to make a sense out of the sequencing data.
 TODO: pointer to cluster installation instructions
@@ -66,7 +66,7 @@ Alternatively, you can install the package in virtual environment to be sure tha
 virtualenv -p python3 venv
 source venv/bin/activate
 pip3 install -r requirements.txt
-pip3 install PySAIS==1.0.4
+pip3 install PySAIS==1.0.7
 python3 setup.py install
 smudgeplot --version
 ```
@@ -91,7 +91,7 @@ kmc_tools transform kmer_counts histogram kmer_k21.hist -cx10000
 
 where `-k` is the kmer length, `-m` is the max amount of RAM to use in GB (1 to 1024), `-ci<value>` excludes kmers occurring less than \<value\> times, `-cs` is the maximum value of a counter, `FILES` is a file name with a list of input files, `kmer_counts` is the output file name prefix, `tmp` is a temporary directory, and `-cx<value>` is the maximum value of counter to be stored in the histogram file.
 
-The next step is to extract genomic kmers using reasonable coverage thresholds. You can either inspect the kmer spectra and choose the L (lower) and U (upper) coverage thresholds via visual inspection, or you can estimate them using the script `kmer_cov_cutoff.R <kmer.hist> <L/U>`. Then, extract kmers in the coverage range from `L` to `U` using `kmc_dump`. Then give the dump of kmers to the python script `hetkmers.py` to compute the set of heterozygous kmers.
+The next step is to extract genomic kmers using reasonable coverage thresholds. You can either inspect the kmer spectra and choose the L (lower) and U (upper) coverage thresholds via visual inspection, or you can estimate them using `smudgeplot cutoff <kmer.hist> <L/U>`. Then, extract kmers in the coverage range from `L` to `U` using `kmc_dump`. Then use `smudgeplot hetkmers` to find kmer pairs in the dump of genomic kmers.
 
 ```
 L=$(smudgeplot cutoff kmer_k21.hist L)
